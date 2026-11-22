@@ -106,10 +106,16 @@ export function AdminNavUser() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <a href={getPublicAppUrl()} target="_blank" rel="noreferrer" onClick={() => setOpenMobile(false)} className="gap-2">
+                <Link
+                  href={getPublicAppUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setOpenMobile(false)}
+                  className="gap-2"
+                >
                   <ExternalLink className="size-4 text-muted-foreground" />
                   <span>View public site</span>
-                </a>
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

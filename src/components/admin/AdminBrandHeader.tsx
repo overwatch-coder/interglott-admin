@@ -71,7 +71,12 @@ export function AdminBrandHeader() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild className="gap-2 p-2">
-              <a href={getPublicDashboardUrl()} target="_blank" rel="noreferrer" onClick={() => setOpenMobile(false)}>
+              <Link
+                href={getPublicDashboardUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpenMobile(false)}
+              >
                 <div className="flex size-6 items-center justify-center rounded-sm border bg-background">
                   <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
                 </div>
@@ -79,7 +84,7 @@ export function AdminBrandHeader() {
                   <span className="text-sm font-medium">Learner Platform</span>
                   <span className="text-[11px] text-muted-foreground">Open learner dashboard</span>
                 </div>
-              </a>
+              </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

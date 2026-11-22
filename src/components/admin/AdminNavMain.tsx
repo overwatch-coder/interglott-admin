@@ -130,10 +130,15 @@ export function AdminNavMain() {
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Public Platform">
-              <a href={getPublicAppUrl()} target="_blank" rel="noreferrer" onClick={handleNavigate}>
+              <Link
+                href={getPublicAppUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleNavigate}
+              >
                 <ExternalLink aria-hidden="true" />
                 <span>Public Platform</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
