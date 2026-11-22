@@ -1,0 +1,325 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AppRole {
+  admin
+  moderator
+  user
+
+  @@map("app_role")
+}
+
+model User {
+  id                 String              @id @default(uuid()) @db.Uuid
+  name               String?
+  email              String?             @unique
+  emailVerified      DateTime?           @map("email_verified") @db.Timestamptz(6)
+  image              String?
+  passwordHash       String?             @map("password_hash")
+  accounts           Account[]
+  sessions           Session[]
+  profile            Profile?
+  roles              UserRole[]
+  learner            Learner?
+  payments           Payment[]
+  leads              Lead[]
+  notifications      UserNotification[]
+  progressAwards     ProgressAward[]
+  assessmentAttempts AssessmentAttempt[]
+  referralsSent      Referral[]          @relation("ReferralSender")
+  referralReceived   Referral?           @relation("ReferralReceiver")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime @db.Timestamptz(6)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime @db.Timestamptz(6)
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Profile {
+  id                      String           @id @db.Uuid
+  email                   String
+  displayName             String           @map("display_name")
+  avatarUrl               String?          @map("avatar_url")
+  learningLanguage        String           @default("french") @map("learning_language")
+  xp                      Int              @default(0)
+  streak                  Int              @default(0)
+  level                   String           @default("beginner")
+  completedLessons        String[]         @default([]) @map("completed_lessons")
+  masteredWords           String[]         @default([]) @map("mastered_words")
+  completedStories        String[]         @default([]) @map("completed_stories")
+  conversations           Int              @default(0)
+  lastActiveDate          String?          @map("last_active_date")
+  lastLessonId            String?          @map("last_lesson_id")
+  onboarded               Boolean          @default(false)
+  dailyChallengeCompleted Boolean          @default(false) @map("daily_challenge_completed")
+  learningGoal            String?          @map("learning_goal")
+  dailyGoalMinutes        Int?             @default(10) @map("daily_goal_minutes")
+  soundEnabled            Boolean?         @default(true) @map("sound_enabled")
+  privacySetting          String           @default("public") @map("privacy_setting")
+  shareToken              String?          @unique @map("share_token")
+  planType                String?          @map("plan_type")
+  creditsBalance          Int              @default(10) @map("credits_balance")
+  planStartDate           DateTime?        @map("plan_start_date") @db.Timestamptz(6)
+  planExpiryDate          DateTime?        @map("plan_expiry_date") @db.Timestamptz(6)
+  planStatus              String?          @map("plan_status")
+  createdAt               DateTime?        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime?        @default(now()) @map("updated_at") @db.Timestamptz(6)
+  referralCode            String?          @unique @map("referral_code") @db.VarChar(20)
+  lastCreditBonusDate     String?          @map("last_credit_bonus_date") @db.VarChar(20)
+  lastCreditStreakBonus   Int              @default(0) @map("last_credit_streak_bonus")
+  user                    User             @relation(fields: [id], references: [id], onDelete: Cascade)
+  viewers                 ProgressViewer[]
+
+  @@map("profiles")
+}
+
+model ProgressViewer {
+  id          String    @id @default(uuid()) @db.Uuid
+  profileId   String    @map("profile_id") @db.Uuid
+  viewerEmail String    @map("viewer_email")
+  invitedAt   DateTime? @default(now()) @map("invited_at") @db.Timestamptz(6)
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("progress_viewers")
+}
+
+model UserRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  grantedBy String?  @map("granted_by") @db.Uuid
+  role      AppRole
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
+
+model Learner {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String?   @unique @map("user_id") @db.Uuid
+  firstName       String    @map("first_name")
+  lastName        String    @map("last_name")
+  email           String    @unique
+  phoneNumber     String?   @map("phone_number")
+  countryCode     String?   @default("+1") @map("country_code")
+  targetLanguages String[]  @default([]) @map("target_languages")
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime? @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@map("learners")
+}
+
+model Lead {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  formData       Json      @map("form_data")
+  courseSelected String?   @map("course_selected") @db.VarChar(100)
+  status         String?   @default("new") @db.VarChar(50)
+  adminNotes     String?   @map("admin_notes")
+  matchedTutorId String?   @map("matched_tutor_id") @db.Uuid
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+model ContactSubmission {
+  id                 String    @id @db.VarChar(50)
+  path               String?   @db.VarChar(50)
+  name               String    @db.VarChar(255)
+  email              String    @db.VarChar(255)
+  phone              String?   @db.VarChar(50)
+  supportCategory    String?   @map("support_category") @db.VarChar(100)
+  supportDescription String?   @map("support_description")
+  attachmentName     String?   @map("attachment_name")
+  subject            String?   @db.VarChar(255)
+  generalMessage     String?   @map("general_message")
+  referralSource     String?   @map("referral_source") @db.VarChar(100)
+  orgName            String?   @map("org_name") @db.VarChar(255)
+  orgWebsite         String?   @map("org_website") @db.VarChar(255)
+  partnershipDetails String?   @map("partnership_details")
+  somethingElse      String?   @map("something_else")
+  createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([path])
+  @@map("contact_submissions")
+}
+
+model TutorBooking {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String?   @map("user_id") @db.Uuid
+  fullName           String    @map("full_name")
+  email              String
+  phone              String?
+  countryOfResidence String?   @map("country_of_residence")
+  timezone           String?
+  languageToLearn    String    @map("language_to_learn")
+  specificTutor      String?   @default("No preference") @map("specific_tutor")
+  sessionFormat      String?   @default("1-on-1 coaching") @map("session_format")
+  currentLevel       String?   @default("Beginner (A1–A2)") @map("current_level")
+  primaryGoal        String?   @map("primary_goal")
+  focusAreas         String[]  @default([]) @map("focus_areas")
+  timeCommitment     String?   @map("time_commitment")
+  preferredDays      String[]  @default([]) @map("preferred_days")
+  preferredTime      String?   @map("preferred_time")
+  sessionLength      String?   @map("session_length")
+  frequency          String?
+  budgetPerHour      String?   @map("budget_per_hour")
+  specialNeeds       String?   @map("special_needs")
+  referralSource     String?   @map("referral_source")
+  status             String?   @default("Pending")
+  createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime? @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([email])
+  @@index([languageToLearn])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("tutor_bookings")
+}
+
+model Payment {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  userEmail      String    @map("user_email")
+  planType       String    @map("plan_type")
+  amount         Decimal   @db.Decimal(10, 2)
+  currency       String    @default("USD")
+  paymentMethod  String    @default("selar") @map("payment_method")
+  transactionId  String?   @map("transaction_id")
+  status         String    @default("pending")
+  adminNotes     String?   @map("admin_notes")
+  paymentDate    DateTime  @default(now()) @map("payment_date") @db.Timestamptz(6)
+  approvalDate   DateTime? @map("approval_date") @db.Timestamptz(6)
+  acknowledgedAt DateTime? @map("acknowledged_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("payments")
+}
+
+model AdminNotification {
+  id             String    @id @default(uuid()) @db.Uuid
+  formType       String    @map("form_type")
+  recipientEmail String    @map("recipient_email")
+  subject        String
+  summaryHtml    String?   @map("summary_html")
+  payload        Json?     @default("{}")
+  status         String?   @default("sent")
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([formType])
+  @@index([createdAt(sort: Desc)])
+  @@map("admin_notifications")
+}
+
+model UserNotification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  title     String   @db.VarChar(200)
+  message   String   @db.VarChar(2000)
+  type      String   @db.VarChar(40)
+  link      String?  @db.VarChar(1000)
+  dedupeKey String?  @map("dedupe_key") @db.VarChar(200)
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, dedupeKey, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model ProgressAward {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  awardKey  String   @map("award_key") @db.VarChar(200)
+  amount    Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, awardKey])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("progress_awards")
+}
+
+model AssessmentAttempt {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  assessmentKey String    @map("assessment_key") @db.VarChar(120)
+  state         Json
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, assessmentKey])
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("assessment_attempts")
+}
+
+model Referral {
+  id             String   @id @default(uuid()) @db.Uuid
+  referrerUserId String   @map("referrer_user_id") @db.Uuid
+  referredUserId String   @unique @map("referred_user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  referrer       User     @relation("ReferralSender", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  referred       User     @relation("ReferralReceiver", fields: [referredUserId], references: [id], onDelete: Cascade)
+
+  @@index([referrerUserId, createdAt(sort: Desc)])
+  @@map("referrals")
+}
