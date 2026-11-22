@@ -76,7 +76,7 @@ export function AdminBrandHeader() {
                   <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium">Public Platform</span>
+                  <span className="text-sm font-medium">Learner Platform</span>
                   <span className="text-[11px] text-muted-foreground">Open learner dashboard</span>
                 </div>
               </a>

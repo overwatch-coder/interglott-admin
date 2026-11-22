@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getPublicDashboardUrl } from "@/lib/publicAppUrl";
+import { getPublicAppUrl } from "@/lib/publicAppUrl";
 import {
   CalendarDays,
   ChevronRight,
@@ -130,7 +130,7 @@ export function AdminNavMain() {
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Public Platform">
-              <a href={getPublicDashboardUrl()} target="_blank" rel="noreferrer" onClick={handleNavigate}>
+              <a href={getPublicAppUrl()} target="_blank" rel="noreferrer" onClick={handleNavigate}>
                 <ExternalLink aria-hidden="true" />
                 <span>Public Platform</span>
               </a>
