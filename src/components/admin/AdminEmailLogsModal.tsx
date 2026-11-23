@@ -23,22 +23,36 @@ interface AdminEmailLogsModalProps {
   onClose: () => void;
 }
 
+const LOGS_PAGE_SIZE = 20;
+
 export default function AdminEmailLogsModal({ isOpen, onClose }: AdminEmailLogsModalProps) {
   const [adminEmail, setAdminEmailInput] = useState<string>("");
   const [logs, setLogs] = useState<AdminEmailLogItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [filterType, setFilterType] = useState<string>("all");
+  const [page, setPage] = useState<number>(1);
+  const [total, setTotal] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
 
   const isMountedRef = React.useRef(true);
 
-  const loadEmailLogs = async () => {
+  const loadEmailLogs = React.useCallback(async (targetPage = page, targetType = filterType) => {
     if (isMountedRef.current) setLoading(true);
     try {
-      const response = await fetch("/api/admin-notifications");
+      const params = new URLSearchParams({
+        page: String(targetPage),
+        limit: String(LOGS_PAGE_SIZE),
+      });
+      if (targetType !== "all") params.set("formType", targetType);
+
+      const response = await fetch(`/api/admin-notifications?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) throw new Error("Unable to load notification logs");
       const body: {
         adminEmail?: string;
+        total?: number;
+        page?: number;
+        totalPages?: number;
         notifications?: Array<{
           id: string;
           form_type: FormNotificationType;
@@ -61,23 +75,30 @@ export default function AdminEmailLogsModal({ isOpen, onClose }: AdminEmailLogsM
         created_at: row.created_at,
       }));
 
-      if (isMountedRef.current) setLogs(dbLogs);
+      if (isMountedRef.current) {
+        setLogs(dbLogs);
+        setTotal(typeof body.total === "number" ? body.total : dbLogs.length);
+        setTotalPages(typeof body.totalPages === "number" ? Math.max(1, body.totalPages) : 1);
+        if (typeof body.page === "number" && body.page !== targetPage) {
+          setPage(body.page);
+        }
+      }
     } catch (e) {
       console.error("Failed to load email notification logs:", e);
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
-  };
+  }, [filterType, page]);
 
   useEffect(() => {
     isMountedRef.current = true;
     if (isOpen) {
-      loadEmailLogs();
+      void loadEmailLogs(page, filterType);
     }
     return () => {
       isMountedRef.current = false;
     };
-  }, [isOpen]);
+  }, [isOpen, page, filterType, loadEmailLogs]);
 
   const handleSendTestNotification = async () => {
     setIsSendingTest(true);
@@ -101,7 +122,8 @@ export default function AdminEmailLogsModal({ isOpen, onClose }: AdminEmailLogsM
       } else {
         toast.error("The test notification could not be sent or logged.");
       }
-      await loadEmailLogs();
+      setPage(1);
+      await loadEmailLogs(1, filterType);
     } catch (e) {
       toast.error("Failed to send test email notification.");
     } finally {
@@ -111,9 +133,8 @@ export default function AdminEmailLogsModal({ isOpen, onClose }: AdminEmailLogsM
 
   if (!isOpen) return null;
 
-  const filteredLogs = logs.filter(
-    (l) => filterType === "all" || l.form_type === filterType
-  );
+  const rangeStart = total === 0 ? 0 : Math.min((page - 1) * LOGS_PAGE_SIZE + 1, total);
+  const rangeEnd = Math.min(page * LOGS_PAGE_SIZE, total);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-end animate-fade-in text-foreground">
@@ -182,15 +203,20 @@ export default function AdminEmailLogsModal({ isOpen, onClose }: AdminEmailLogsM
         </div>
 
         {/* LOGS HEADER & FILTER */}
-        <div className="flex items-center justify-between gap-3 pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <select
               value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
+              onChange={(e) => {
+                setFilterType(e.target.value);
+                setPage(1);
+              }}
               className="px-3 py-1.5 rounded-xl border border-border bg-background text-foreground text-xs font-medium focus:outline-none"
             >
-              <option value="all">All Form Notifications ({logs.length})</option>
+              <option value="all">
+                All Form Notifications{filterType === "all" ? ` (${total})` : ""}
+              </option>
               <option value="tutor_booking">Tutor Bookings</option>
               <option value="learner_signup">Learner Signups</option>
               <option value="contact_ticket">Contact Tickets</option>
@@ -201,7 +227,7 @@ export default function AdminEmailLogsModal({ isOpen, onClose }: AdminEmailLogsM
 
           <button
             type="button"
-            onClick={loadEmailLogs}
+            onClick={() => void loadEmailLogs(page, filterType)}
             className="p-2 rounded-xl border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all flex items-center gap-1 text-xs font-semibold"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -216,12 +242,12 @@ export default function AdminEmailLogsModal({ isOpen, onClose }: AdminEmailLogsM
               <RefreshCw className="h-4 w-4 animate-spin text-primary" />
               <span>Loading notification logs...</span>
             </div>
-          ) : filteredLogs.length === 0 ? (
+          ) : logs.length === 0 ? (
             <div className="p-8 text-center text-xs text-muted-foreground border border-border rounded-2xl bg-secondary/20">
               No email notifications recorded for this category yet.
             </div>
           ) : (
-            filteredLogs.map((log) => (
+            logs.map((log) => (
               <div
                 key={log.id}
                 className="p-4 rounded-2xl bg-card border border-border/80 space-y-2 text-xs shadow-xs"
@@ -268,6 +294,40 @@ export default function AdminEmailLogsModal({ isOpen, onClose }: AdminEmailLogsM
             ))
           )}
         </div>
+
+        {total > 0 && (
+          <nav
+            aria-label="Notification log pages"
+            className="flex flex-col gap-2 border-t border-border pt-4 text-xs sm:flex-row sm:items-center sm:justify-between"
+          >
+            <span className="text-muted-foreground">
+              Showing {rangeStart}–{rangeEnd} of {total}
+            </span>
+            {totalPages > 1 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={loading || page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="inline-flex h-8 items-center rounded-lg border border-border px-3 font-medium hover:bg-secondary disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  Previous
+                </button>
+                <span className="px-1 text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={loading || page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="inline-flex h-8 items-center rounded-lg border border-border px-3 font-medium hover:bg-secondary disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </nav>
+        )}
       </div>
     </div>
   );

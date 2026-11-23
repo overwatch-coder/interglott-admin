@@ -15,6 +15,12 @@ export function parsePage(value: string | string[] | undefined) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? Math.min(parsed, 100_000) : 1;
 }
 
+export function clampPage(page: number, total: number, pageSize = ADMIN_PAGE_SIZE) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(1, page), pages);
+  return { page: safePage, pages, skip: (safePage - 1) * pageSize };
+}
+
 export async function requireAdminPage() {
   const guard = await adminGuard();
   if (guard.response) {
@@ -56,7 +62,7 @@ export async function getAdminLearnersPage({ page, search, language, sort = "new
         ? [{ firstName: "asc" }, { lastName: "asc" }]
         : [{ createdAt: "desc" }];
   const skip = (page - 1) * ADMIN_PAGE_SIZE;
-  const [total, rows, totalRegistered, french, germanSpanish, chineseArabic] = await Promise.all([
+  const [total, initialRows, totalRegistered, french, germanSpanish, chineseArabic] = await Promise.all([
     prisma.learner.count({ where }),
     prisma.learner.findMany({ where, orderBy, skip, take: ADMIN_PAGE_SIZE }),
     prisma.learner.count({ where: learnerNotAdmin }),
@@ -64,6 +70,10 @@ export async function getAdminLearnersPage({ page, search, language, sort = "new
     prisma.learner.count({ where: { AND: [learnerNotAdmin, { targetLanguages: { hasSome: ["German", "Spanish"] } }] } }),
     prisma.learner.count({ where: { AND: [learnerNotAdmin, { targetLanguages: { hasSome: ["Chinese", "Arabic"] } }] } }),
   ]);
+  const clamped = clampPage(page, total);
+  const rows = clamped.page !== page && total > 0
+    ? await prisma.learner.findMany({ where, orderBy, skip: clamped.skip, take: ADMIN_PAGE_SIZE })
+    : initialRows;
   return {
     rows: rows.map((learner) => ({
       id: learner.id,
@@ -77,7 +87,7 @@ export async function getAdminLearnersPage({ page, search, language, sort = "new
       created_at: learner.createdAt?.toISOString() ?? "",
     })),
     total,
-    page,
+    page: clamped.page,
     pageSize: ADMIN_PAGE_SIZE,
     metrics: { totalRegistered, french, germanSpanish, chineseArabic },
   };
@@ -108,7 +118,7 @@ export async function getAdminTutorBookingsPage({ page, search, language, status
         ? { fullName: "asc" }
         : { createdAt: "desc" };
   const skip = (page - 1) * ADMIN_PAGE_SIZE;
-  const [total, rows, totalBookings, pending, inProgress, completed] = await Promise.all([
+  const [total, initialRows, totalBookings, pending, inProgress, completed] = await Promise.all([
     prisma.tutorBooking.count({ where }),
     prisma.tutorBooking.findMany({ where, orderBy, skip, take: ADMIN_PAGE_SIZE }),
     prisma.tutorBooking.count(),
@@ -116,6 +126,10 @@ export async function getAdminTutorBookingsPage({ page, search, language, status
     prisma.tutorBooking.count({ where: { status: "In Progress" } }),
     prisma.tutorBooking.count({ where: { status: "Completed" } }),
   ]);
+  const clamped = clampPage(page, total);
+  const rows = clamped.page !== page && total > 0
+    ? await prisma.tutorBooking.findMany({ where, orderBy, skip: clamped.skip, take: ADMIN_PAGE_SIZE })
+    : initialRows;
   return {
     rows: rows.map((booking) => ({
       ...booking,
@@ -140,7 +154,7 @@ export async function getAdminTutorBookingsPage({ page, search, language, status
       updated_at: booking.updatedAt?.toISOString() ?? "",
     })),
     total,
-    page,
+    page: clamped.page,
     pageSize: ADMIN_PAGE_SIZE,
     metrics: { totalBookings, pending, inProgress, completed },
   };
@@ -173,13 +187,17 @@ export async function getAdminPaymentsPage({ page, search, status, sort = "newes
           ? { amount: "asc" }
           : { createdAt: "desc" };
   const skip = (page - 1) * ADMIN_PAGE_SIZE;
-  const [total, rows, pending, approved, rejected] = await Promise.all([
+  const [total, initialRows, pending, approved, rejected] = await Promise.all([
     prisma.payment.count({ where }),
     prisma.payment.findMany({ where, orderBy, skip, take: ADMIN_PAGE_SIZE }),
     prisma.payment.count({ where: { status: "pending" } }),
     prisma.payment.count({ where: { status: "approved" } }),
     prisma.payment.count({ where: { status: "rejected" } }),
   ]);
+  const clamped = clampPage(page, total);
+  const rows = clamped.page !== page && total > 0
+    ? await prisma.payment.findMany({ where, orderBy, skip: clamped.skip, take: ADMIN_PAGE_SIZE })
+    : initialRows;
   return {
     rows: rows.map((payment) => ({
       id: payment.id,
@@ -195,7 +213,7 @@ export async function getAdminPaymentsPage({ page, search, status, sort = "newes
       admin_notes: payment.adminNotes,
     })),
     total,
-    page,
+    page: clamped.page,
     pageSize: ADMIN_PAGE_SIZE,
     metrics: { pending, approved, rejected },
   };
@@ -218,10 +236,14 @@ export async function getAdminUsersPage({ page, search, sort = "oldest" }: { pag
       : sort === "name_asc"
         ? { user: { name: "asc" } }
         : { createdAt: "asc" };
-  const [total, rows] = await Promise.all([
+  const [total, initialRows] = await Promise.all([
     prisma.userRole.count({ where }),
     prisma.userRole.findMany({ where, include: { user: { include: { profile: true } } }, orderBy, skip: (page - 1) * ADMIN_PAGE_SIZE, take: ADMIN_PAGE_SIZE }),
   ]);
+  const clamped = clampPage(page, total);
+  const rows = clamped.page !== page && total > 0
+    ? await prisma.userRole.findMany({ where, include: { user: { include: { profile: true } } }, orderBy, skip: clamped.skip, take: ADMIN_PAGE_SIZE })
+    : initialRows;
   const grantorIds = [...new Set(rows.map((row) => row.grantedBy).filter((id): id is string => Boolean(id)))];
   const grantors = grantorIds.length > 0
     ? await prisma.user.findMany({ where: { id: { in: grantorIds } }, select: { id: true, email: true } })
@@ -239,7 +261,7 @@ export async function getAdminUsersPage({ page, search, sort = "oldest" }: { pag
       role: "admin" as const,
     })),
     total,
-    page,
+    page: clamped.page,
     pageSize: ADMIN_PAGE_SIZE,
   };
 }
@@ -301,10 +323,14 @@ export async function getAdminLeadsPage({ page, search, status, course, sort = "
     ],
   };
   const orderBy: Prisma.LeadOrderByWithRelationInput = sort === "oldest" ? { createdAt: "asc" } : { createdAt: "desc" };
-  const [total, rows] = await Promise.all([
+  const [total, initialRows] = await Promise.all([
     prisma.lead.count({ where }),
     prisma.lead.findMany({ where, orderBy, skip: (page - 1) * ADMIN_PAGE_SIZE, take: ADMIN_PAGE_SIZE }),
   ]);
+  const clamped = clampPage(page, total);
+  const rows = clamped.page !== page && total > 0
+    ? await prisma.lead.findMany({ where, orderBy, skip: clamped.skip, take: ADMIN_PAGE_SIZE })
+    : initialRows;
   return {
     rows: rows.map((lead) => ({
       id: lead.id,
@@ -318,7 +344,7 @@ export async function getAdminLeadsPage({ page, search, status, course, sort = "
       updated_at: lead.updatedAt?.toISOString() ?? "",
     })),
     total,
-    page,
+    page: clamped.page,
     pageSize: ADMIN_PAGE_SIZE,
   };
 }
@@ -364,14 +390,20 @@ export async function getAdminOverviewPage({
   ]);
 
   let total = 0;
+  let safePage = page;
   let rows: (LeadItem | ContactTicketItem | AdminUserItem | PaymentItem)[] = [];
   if (["all_leads", "bookings", "diagnostics"].includes(tab)) {
     const orderBy: Prisma.LeadOrderByWithRelationInput = sort === "oldest" ? { createdAt: "asc" } : { createdAt: "desc" };
-    const [count, leads] = await Promise.all([
+    const [count, initialLeads] = await Promise.all([
       prisma.lead.count({ where: tabLeadWhere }),
       prisma.lead.findMany({ where: tabLeadWhere, orderBy, skip, take: ADMIN_PAGE_SIZE }),
     ]);
+    const clamped = clampPage(page, count);
+    const leads = clamped.page !== page && count > 0
+      ? await prisma.lead.findMany({ where: tabLeadWhere, orderBy, skip: clamped.skip, take: ADMIN_PAGE_SIZE })
+      : initialLeads;
     total = count;
+    safePage = clamped.page;
     rows = leads.map((lead) => ({
       id: lead.id,
       user_id: lead.userId ?? undefined,
@@ -399,11 +431,16 @@ export async function getAdminOverviewPage({
         : sort === "name_asc"
           ? { name: "asc" }
           : { createdAt: "desc" };
-    const [count, submissions] = await Promise.all([
+    const [count, initialSubmissions] = await Promise.all([
       prisma.contactSubmission.count({ where }),
       prisma.contactSubmission.findMany({ where, orderBy, skip, take: ADMIN_PAGE_SIZE }),
     ]);
+    const clamped = clampPage(page, count);
+    const submissions = clamped.page !== page && count > 0
+      ? await prisma.contactSubmission.findMany({ where, orderBy, skip: clamped.skip, take: ADMIN_PAGE_SIZE })
+      : initialSubmissions;
     total = count;
+    safePage = clamped.page;
     rows = submissions.map((row) => ({
       id: row.id, path: row.path ?? undefined, name: row.name, email: row.email, phone: row.phone ?? undefined,
       support_category: row.supportCategory ?? undefined, support_description: row.supportDescription ?? undefined,
@@ -416,10 +453,12 @@ export async function getAdminOverviewPage({
   } else if (tab === "users") {
     const data = await getAdminUsersPage({ page, search: query, sort });
     total = data.total;
+    safePage = data.page;
     rows = data.rows;
   } else {
     const data = await getAdminPaymentsPage({ page, search: query, status: status === "all" ? "all" : status, sort });
     total = data.total;
+    safePage = data.page;
     rows = data.rows.map((payment) => ({ ...payment, created_at: payment.payment_date }));
   }
 
@@ -427,7 +466,7 @@ export async function getAdminOverviewPage({
     tab,
     rows,
     total,
-    page,
+    page: safePage,
     pageSize: ADMIN_PAGE_SIZE,
     counts: { all_leads: surveyCount, contact_tickets: contactCount, bookings: bookingCount, diagnostics: diagnosticCount, users: adminCount, payments: paymentCount },
   };
